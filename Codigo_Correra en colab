@@ -1,0 +1,50 @@
+!pip install networkx pandarallel tqdm
+
+import networkx as nx
+import pandas as pd
+import numpy as np
+import pickle
+from tqdm import tqdm
+from pandarallel import pandarallel
+
+pandarallel.initialize(progress_bar=True)
+
+import os
+
+if not os.path.exists("revmap.pkl") or not os.path.exists("BitcoinGraph.gexf"):
+    print("No se encontraron archivos reales, creando un grafo simulado...")
+    G = nx.gnm_random_graph(100, 250, seed=42)
+    for n in G.nodes():
+        G.nodes[n]['address'] = f"address_{n}"
+    rev_map = {n: f"address_{n}" for n in G.nodes()}
+    nx.write_gexf(G, "BitcoinGraph.gexf")
+    with open("revmap.pkl", "wb") as f:
+        pickle.dump(rev_map, f)
+    print("Grafo y mapa simulados creados correctamente.")
+else:
+    print("Archivos reales encontrados, cargando...")
+
+with open("revmap.pkl", "rb") as f:
+    rev_map = pickle.load(f)
+
+graph = nx.read_gexf("BitcoinGraph.gexf")
+print(f"Grafo cargado: {graph.number_of_nodes()} nodos, {graph.number_of_edges()} enlaces")
+
+degree_centrality = nx.degree_centrality(graph)
+betweenness_centrality = nx.betweenness_centrality(graph, k=50)
+
+df_metrics = pd.DataFrame({
+    "node": list(degree_centrality.keys()),
+    "degree_centrality": list(degree_centrality.values()),
+    "betweenness_centrality": list(betweenness_centrality.values())
+})
+
+df_metrics["address"] = df_metrics["node"].map(rev_map).fillna("desconocido")
+
+top5 = df_metrics.sort_values("degree_centrality", ascending=False).head(5)
+print("\nTop 5 nodos por centralidad de grado:")
+for _, row in top5.iterrows():
+    print(f"Nodo {row['node']} -> {row['degree_centrality']:.4f} ({row['address']})")
+
+df_metrics.to_csv("final_results.csv", index=False)
+print("\nResultados guardados en 'final_results.csv'")
